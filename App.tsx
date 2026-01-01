@@ -23,7 +23,8 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isGapiReady, setIsGapiReady] = useState(false);
-  const [showTroubleshooter, setShowTroubleshooter] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fetchUserProfile = async (accessToken: string) => {
     try {
@@ -50,15 +51,16 @@ const App: React.FC = () => {
         await window.gapi.client.init({
           discoveryDocs: [DISCOVERY_DOC],
         });
+        console.log("GAPI client initialized");
         setIsGapiReady(true);
       } catch (err) {
         console.error('Gapi init error', err);
-        setError("Failed to initialize Google API. Please refresh.");
+        setError("Google API initialization failed. Check your Internet connection.");
       }
     };
 
     const initGis = () => {
-      if (!window.google || CLIENT_ID.includes('YOUR_GOOGLE_CLIENT_ID')) return;
+      if (!window.google || !CLIENT_ID) return;
       
       try {
         const client = window.google.accounts.oauth2.initTokenClient({
@@ -66,16 +68,16 @@ const App: React.FC = () => {
           scope: SCOPES,
           callback: async (resp: any) => {
             if (resp.error) {
-              setError(`Login Error: ${resp.error}`);
-              setShowTroubleshooter(true);
+              console.error("GIS Callback error:", resp.error);
+              setError(`Google Auth Error: ${resp.error_description || resp.error}`);
               return;
             }
             await fetchUserProfile(resp.access_token);
             setError(null);
-            setShowTroubleshooter(false);
           },
         });
         setTokenClient(client);
+        console.log("GIS Token client initialized");
       } catch (e) {
         console.error("GIS Init error", e);
       }
@@ -90,8 +92,7 @@ const App: React.FC = () => {
       setError(null);
       tokenClient.requestAccessToken({ prompt: 'consent' });
     } else {
-      setError("Google Identity Client is not ready. If you just updated the code, please wait a few seconds and refresh.");
-      setShowTroubleshooter(true);
+      setError("Identity system is not ready. Please refresh the page.");
     }
   };
 
@@ -125,12 +126,12 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error('Fetch error:', err);
       if (err.status === 401) {
-        setError("Your session has expired. Please sign in again.");
+        setError("Session expired. Please sign in again.");
         setUser(null);
       } else if (err.status === 403) {
-        setError("Access Denied: The spreadsheet isn't shared with the account you logged in with.");
+        setError("Permission Denied: Ensure this Sheet is shared with Editor access to your account.");
       } else {
-        setError(`Sheet error: ${err.result?.error?.message || 'Check if the Spreadsheet ID is correct and the sheet is shared.'}`);
+        setError(`Data error: ${err.result?.error?.message || 'Check your Spreadsheet ID settings.'}`);
       }
     } finally {
       setIsLoading(false);
@@ -157,7 +158,7 @@ const App: React.FC = () => {
       });
       await fetchMonthData(currentMonth);
     } catch (err) {
-      setError("Failed to save. Make sure you have 'Editor' access to the Google Sheet.");
+      setError("Save failed. Check Sheet permissions.");
     } finally {
       setIsLoading(false);
     }
@@ -188,6 +189,12 @@ const App: React.FC = () => {
     }
   };
 
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(window.location.origin);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header user={user} onLogin={handleLogin} onLogout={handleLogout} />
@@ -197,71 +204,141 @@ const App: React.FC = () => {
           <div>
             <h2 className="text-3xl md:text-5xl font-black text-slate-900 mb-2 tracking-tight italic uppercase">Ledger 2025</h2>
             <p className="text-slate-500 max-w-xl text-lg">
-              {user ? `Records for ${currentMonth}` : "Securely sync contributions to your shared Google Sheet."}
+              {user ? `Record log for ${currentMonth}` : "Securely sync contributions to your shared Google Sheet."}
             </p>
           </div>
           {user && (
             <div className="flex gap-2 items-center bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
               <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">
-                Authenticated
+                Sync Active
               </span>
             </div>
           )}
         </section>
 
         {error && (
-          <div className="mb-8 bg-red-50 border border-red-200 p-5 text-red-700 flex flex-col gap-4 rounded-2xl shadow-sm">
-            <div className="flex justify-between items-start">
+          <div className="mb-8 bg-red-50 border border-red-200 p-5 text-red-700 flex flex-col gap-3 rounded-2xl shadow-sm">
+            <div className="flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <div className="bg-red-100 p-2 rounded-full">
-                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
+                <div className="bg-red-100 p-1.5 rounded-lg text-red-600">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
                 </div>
                 <span className="font-bold text-sm">{error}</span>
               </div>
-              <button onClick={() => { setError(null); setShowTroubleshooter(false); }} className="text-red-400 hover:text-red-600 p-1">
+              <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            
-            {(showTroubleshooter || error.includes("400")) && (
-              <div className="bg-white p-5 rounded-xl text-sm space-y-4 border border-red-100 text-slate-700 shadow-inner">
-                <div className="flex items-center gap-2 text-red-800 font-black uppercase tracking-tighter">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
-                  Fix "Error 400: invalid_request"
-                </div>
-                <p className="leading-relaxed">Google rejected the login because the current domain is not authorized. Follow these steps:</p>
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">1. Copy this Origin URL</span>
-                    <code className="bg-white px-2 py-1 rounded border border-slate-300 font-mono text-xs select-all text-blue-600 font-bold break-all">
-                      {window.location.origin}
-                    </code>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">2. Update Google Console</span>
-                    <p className="text-xs">Go to your <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="underline font-bold text-emerald-600 hover:text-emerald-700">Credentials Page</a>, click your Client ID, and paste the URL above into <strong>Authorized JavaScript origins</strong>.</p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 italic">Note: Google can take up to 5 minutes to apply this change.</p>
-              </div>
+            {error.includes("400") && (
+              <p className="text-xs font-medium opacity-80">Check the help section below to authorize this domain.</p>
             )}
           </div>
         )}
 
         {!user ? (
-          <div className="flex flex-col items-center justify-center py-24 bg-white border border-slate-100 rounded-[2rem] shadow-sm text-center px-4">
-            <div className="w-24 h-24 bg-emerald-50 rounded-3xl flex items-center justify-center mb-8 rotate-3 shadow-lg">
-              <svg className="w-12 h-12 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center justify-center py-20 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm text-center px-4 max-w-3xl mx-auto border-b-4 border-b-emerald-100">
+            <div className="w-20 h-20 bg-emerald-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner border border-emerald-100/50">
+              <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h3 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Access Restricted</h3>
-            <p className="text-slate-500 max-w-sm mb-10 text-lg leading-relaxed">Sign in to sync with the Google Sheet. Your data is stored directly in your shared spreadsheet.</p>
+            
+            <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tighter">Vault Locked</h3>
+            <p className="text-slate-500 max-w-sm mb-12 text-xl leading-relaxed">Please authenticate with Google to access the {APP_YEAR} contribution data.</p>
+            
             <button 
               onClick={handleLogin}
-              className="group bg-slate-900 text-white pl-8 pr-10 py-5 rounded-3xl text-xl font-black hover:bg-slate-800 transition-all flex items-center gap-4 shadow-2xl hover:shadow-slate-300 active:scale-95"
+              className="group bg-slate-900 text-white pl-8 pr-12 py-5 rounded-[2rem] text-xl font-black hover:bg-slate-800 transition-all flex items-center gap-5 shadow-2xl active:scale-95 mb-12"
             >
-              <div className="bg-white p-2 rounded-xl group-hover:scale-110 transition-transform">
+              <div className="bg-white p-1.5 rounded-xl">
                 <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#000">
-                  <path d="M12.545,10.239v3.821h5.445c-0.712,
+                  <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+                </svg>
+              </div>
+              Unlock Ledger
+            </button>
+
+            <button 
+              onClick={() => setShowHelp(!showHelp)}
+              className="group flex items-center gap-2 text-emerald-600 text-sm font-black uppercase tracking-widest hover:text-emerald-700 transition-all"
+            >
+              <svg className={`w-4 h-4 transition-transform ${showHelp ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7" />
+              </svg>
+              Troubleshoot Login (Error 400)
+            </button>
+
+            {showHelp && (
+              <div className="mt-8 bg-slate-50 border border-slate-200 p-8 rounded-[2rem] text-left w-full max-w-xl animate-in fade-in slide-in-from-top-4 duration-300">
+                <h4 className="font-black text-slate-900 uppercase tracking-tighter text-lg mb-4 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-emerald-600 text-white rounded-md flex items-center justify-center text-xs">!</span>
+                  Fixing the 400 Error
+                </h4>
+                <p className="text-sm text-slate-600 mb-6 leading-relaxed font-medium">
+                  This "long" URL is your app's temporary home. Even if it looks weird, you <strong>must</strong> add it to your Google Cloud Console for security to pass.
+                </p>
+                
+                <div className="mb-6">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Step 1: Copy this specific URL</span>
+                  <div className="flex gap-2">
+                    <code className="bg-white border-2 border-slate-200 p-3 rounded-xl flex-grow text-xs font-mono text-emerald-700 font-bold break-all shadow-sm">
+                      {window.location.origin}
+                    </code>
+                    <button 
+                      onClick={copyToClipboard}
+                      className={`px-6 py-3 rounded-xl text-xs font-black transition-all shadow-md active:scale-90 ${copied ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-sm space-y-4 text-slate-700 font-medium">
+                  <p><strong>Step 2:</strong> Open your <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="text-emerald-600 underline font-black hover:text-emerald-700">Google Credentials Panel</a>.</p>
+                  <p><strong>Step 3:</strong> Click on your Client ID name.</p>
+                  <p><strong>Step 4:</strong> Paste the URL above into both <strong>Authorized JavaScript origins</strong> AND <strong>Authorized redirect URIs</strong>.</p>
+                  <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-[11px] text-emerald-800 italic">
+                    Note: It usually takes <strong>3 to 5 minutes</strong> for Google to "learn" the new URL. Refresh this page after a few minutes.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <div className="lg:col-span-4 space-y-8">
+              <MonthSelector currentMonth={currentMonth} onMonthChange={setCurrentMonth} />
+              <div className="sticky top-24">
+                <ContributionForm 
+                  user={user} 
+                  selectedMonth={currentMonth} 
+                  onSubmit={handleAddContribution}
+                  isLoading={isLoading}
+                />
+              </div>
+            </div>
+
+            <div className="lg:col-span-8">
+              <ContributionsTable 
+                contributions={contributions} 
+                user={user}
+                onEdit={handleEditContribution}
+                onDelete={handleDeleteContribution}
+                isLoading={isLoading}
+              />
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="bg-white border-t border-slate-100 py-12 text-center mt-auto">
+        <div className="max-w-7xl mx-auto px-4">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">&copy; 2025 Ledger Sync &bull; Secure Sheets Protocol</p>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
